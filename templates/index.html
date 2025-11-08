@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔐 Advanced Crypto & Steganografi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6">
+
+  <h1 class="text-3xl font-bold text-cyan-400 text-center mb-6">
+    🔐 Caesar, Vigenère, Base64 & Steganografi
+  </h1>
+
+  <form method="POST" action="/process" enctype="multipart/form-data" class="max-w-5xl mx-auto bg-gray-800 p-6 rounded-2xl shadow-lg space-y-6">
+
+    <!-- Input Pesan -->
+    <div>
+      <label class="block mb-2 font-semibold text-cyan-300">Pesan (Plaintext):</label>
+      <textarea name="text" id="plaintext" class="w-full p-3 rounded bg-gray-700 text-gray-100" rows="4">{{ text or '' }}</textarea>
+    </div>
+
+    <!-- Pilihan Algoritma -->
+    <div class="flex flex-wrap gap-3 items-center">
+      <select name="algorithm" class="bg-gray-700 rounded p-2">
+        <option value="caesar" {% if algo == 'caesar' %}selected{% endif %}>Caesar Cipher</option>
+        <option value="vigenere" {% if algo == 'vigenere' %}selected{% endif %}>Vigenère Cipher</option>
+        <option value="base64" {% if algo == 'base64' %}selected{% endif %}>Base64</option>
+      </select>
+
+      <input type="number" name="caesar_key" value="{{ caesar_key or 3 }}" class="p-2 w-28 rounded bg-gray-700" placeholder="Shift">
+      <input type="text" name="vigenere_key" value="{{ vigenere_key or 'KEY' }}" class="p-2 w-40 rounded bg-gray-700" placeholder="Kunci">
+
+      <button name="mode" value="encrypt_manual" class="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded">Enkripsi</button>
+      <button name="mode" value="decrypt_manual" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded">Dekripsi</button>
+      <button name="mode" value="encrypt_all" class="bg-cyan-700 hover:bg-cyan-600 px-4 py-2 rounded">🔒 Encrypt All</button>
+      <button name="mode" value="decrypt_all" class="bg-purple-700 hover:bg-purple-600 px-4 py-2 rounded">🔓 Decrypt All</button>
+      <button name="mode" value="reset" class="bg-red-700 hover:bg-red-600 px-4 py-2 rounded">🧹 Reset</button>
+    </div>
+
+    <!-- Hasil Enkripsi -->
+    <div>
+      <h2 class="text-xl text-cyan-300 mb-2">🧾 Hasil</h2>
+      <pre class="bg-gray-700 p-3 rounded overflow-x-auto text-sm">{{ result or '' }}</pre>
+    </div>
+
+    <!-- Langkah Proses (Optional) -->
+    {% if step1 or step2 or step3 %}
+    <div class="space-y-2">
+      <p><span class="text-cyan-400 font-semibold">Step 1:</span> {{ step1 }}</p>
+      <p><span class="text-cyan-400 font-semibold">Step 2:</span> {{ step2 }}</p>
+      <p><span class="text-cyan-400 font-semibold">Step 3:</span> {{ step3 }}</p>
+    </div>
+    {% endif %}
+
+  </form>
+
+  <!-- Steganografi Section -->
+  <div class="max-w-5xl mx-auto mt-10 bg-gray-800 p-6 rounded-2xl shadow-lg">
+    <h2 class="text-2xl font-bold text-cyan-400 mb-4 text-center">🧩 Steganografi (LSB Image Encoder)</h2>
+
+    <div class="space-y-3">
+      <input type="file" id="imageInput" accept="image/*" class="bg-gray-700 rounded p-2 w-full mb-2">
+
+      <div class="flex flex-wrap gap-2">
+        <button type="button" onclick="embedMessage()" class="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded">🧬 Sisipkan Pesan</button>
+        <button type="button" onclick="extractMessage()" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded">🔍 Ekstrak Pesan</button>
+        <button type="button" onclick="downloadStego()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded">💾 Unduh Stego</button>
+      </div>
+
+      <canvas id="canvas" class="hidden mt-4 rounded shadow"></canvas>
+      <pre id="stegoInfo" class="bg-gray-700 p-3 rounded text-sm overflow-x-auto mt-3"></pre>
+    </div>
+  </div>
+
+  <!-- ======================= SCRIPT STEGANOGRAFI ======================= -->
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    let currentImage = null;
+
+    function embedMessage() {
+      const file = document.getElementById("imageInput").files[0];
+      if (!file) return alert("Pilih gambar dulu!");
+      const message = document.getElementById("plaintext").value;
+
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = e => {
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          const imgData = ctx.getImageData(0, 0, img.width, img.height);
+          const data = imgData.data;
+
+          const bits = [];
+          const msgBytes = new TextEncoder().encode(message + "\x00\xff\x00\xff");
+          msgBytes.forEach(byte => {
+            for (let i = 7; i >= 0; i--) bits.push((byte >> i) & 1);
+          });
+
+          if (bits.length > data.length / 4) {
+            alert("Pesan terlalu panjang untuk gambar ini!");
+            return;
+          }
+
+          let bitIndex = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (bitIndex >= bits.length) break;
+            data[i] = (data[i] & ~1) | bits[bitIndex++];
+          }
+
+          ctx.putImageData(imgData, 0, 0);
+          canvas.classList.remove("hidden");
+          currentImage = canvas.toDataURL("image/png");
+          document.getElementById("stegoInfo").textContent =
+            "✅ Pesan berhasil disisipkan ke gambar!\nUkuran pesan: " + message.length + " karakter.";
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function extractMessage() {
+      if (!canvas.width) return alert("Belum ada gambar di canvas!");
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      let bits = [];
+      for (let i = 0; i < data.length; i += 4) bits.push(data[i] & 1);
+
+      let bytes = [];
+      for (let i = 0; i < bits.length; i += 8) {
+        let byte = 0;
+        for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j];
+        bytes.push(byte);
+      }
+
+      const buffer = new Uint8Array(bytes);
+      const text = new TextDecoder().decode(buffer);
+      const endIndex = text.indexOf("\x00\xff\x00\xff");
+      const message = endIndex !== -1 ? text.slice(0, endIndex) : "[Tidak ditemukan delimiter pesan]";
+      document.getElementById("stegoInfo").textContent =
+        "🔍 Pesan terdeteksi dari gambar:\n" + message;
+    }
+
+    function downloadStego() {
+      if (!currentImage) return alert("Belum ada gambar stego!");
+      const a = document.createElement("a");
+      a.href = currentImage;
+      a.download = "stego_result.png";
+      a.click();
+    }
+  </script>
+
+</body>
+</html>
